@@ -152,6 +152,28 @@ void histo(TTree *tree, int hit_filter,TH1F *h_charge, TH1F *h_peak_time, TH1F *
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void plot_wf(int argc, char** argv) {
+
+
+    std::vector<double> Q0_s_Q1_c;
+    std::vector<double> Q1_c;
+    std::vector<double> Q1_s_Q2_c;
+    std::vector<double> Q2_c;
+
+
+    //On utilise ces mêmes vecteurs avec un a (amplitude : objectif de comparer charger et amplitude
+    std::vector<double> Q0_s_Q1_a;
+    std::vector<double> Q1_a;
+    std::vector<double> Q1_s_Q2_a;
+    std::vector<double> Q2_a;
+
+    //Vceteurs à remplir pour comparer l'amplitue et la charge dues aux cluster avec un seul hit (0)
+    std::vector<double> AMPLITUDE_1;
+    std::vector<double> AMPLITUDE_PLUS_QUE_1;
+    std::vector<double> CHARGE_1;
+    std::vector<double> CHARGE_PLUS_QUE_1;
+
+
+
     int count_hit0 = 0;
     int count_hit1 = 0;
     int count_hit2 = 0;
@@ -235,8 +257,6 @@ void plot_wf(int argc, char** argv) {
 
     std::vector<int> ZERO;
     std::vector<int> UNO;
-    std::vector<int> DOS;
-    std::vector<int> TRES;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //HISTO DES CLUSTERS PAR TRACE ET COUPURE
@@ -260,8 +280,42 @@ void plot_wf(int argc, char** argv) {
             }
 
 
+        tree -> GetEntry(i);
+
+        if (hit == 0 && clu_size > 1){
+            Q0_s_Q1_c.push_back(integrale(10, wf));
+            Q0_s_Q1_a.push_back(coordypic(wf));
+
+            tree -> GetEntry(i+1);
+
+            Q1_c.push_back(integrale(10, wf));
+            Q1_a.push_back(coordypic(wf));
+        }
 
         tree -> GetEntry(i);
+
+        if (hit == 1 && clu_size > 2){
+            Q1_s_Q2_c.push_back(integrale(10, wf));
+            Q1_s_Q2_a.push_back(coordypic(wf));
+
+            tree -> GetEntry(i+1);
+
+            Q2_c.push_back(integrale(10, wf));
+            Q2_a.push_back(coordypic(wf));
+        }
+
+        tree -> GetEntry(i);
+
+
+        if (clu_size == 1){
+           AMPLITUDE_1.push_back(coordypic(wf));
+           CHARGE_1.push_back(integrale(10,wf));
+        }
+        if (clu_size > 1){
+           AMPLITUDE_PLUS_QUE_1.push_back(coordypic(wf));
+           CHARGE_PLUS_QUE_1.push_back(integrale(10,wf));
+        }
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Looking at a single track
 
         //if (event == look_event && pattern == look_pattern && cluster == look_cluster) {
@@ -314,82 +368,36 @@ void plot_wf(int argc, char** argv) {
     }
     //Traitement des hits
 
-    //Les listes des ZERO serviront à calculer le premier rartio les UNO à l'autre
-    std::vector<int> ZERO0;
-    std::vector<int> ZERO1;
-    std::vector<int> UNO0;
-    std::vector<int> UNO1;
-    std::vector<int> temp;
-
-
-    //On utilise ces mêmes vecteurs avec un B à la fin pour dire Bis : objectif de comparer charger et amplitude
-    std::vector<int> ZERO0B;
-    std::vector<int> ZERO1B;
-    std::vector<int> UNO0B;
-    std::vector<int> UNO1B;
-
-
-    for (int h = 0; h < vtest_hit.size(); ++h){
-        tree -> GetEntry(h);
-        temp.push_back(vtest_hit[h]);
 
 
 
-        if (h + 1 < vtest_hit.size() && vtest_hit[h] + 1 != vtest_hit[h+1]){
-            hit_average.push_back(temp.size());
-            temp.clear();
-            }
 
-
-        if (h + 1 < vtest_hit.size() && vtest_hit[h] + 1 == vtest_hit[h+1] && vtest_hit[h] == 0){
-               ZERO0.push_back(integrale(10, wf));
-               ZERO0B.push_back(coordypic(wf));
-
-               tree -> GetEntry(h+1);
-
-               ZERO1.push_back(integrale(10, wf));
-               ZERO1B.push_back(coordypic(wf));
-            }
-
-
-        if (h + 1 < vtest_hit.size() && vtest_hit[h] + 1 == vtest_hit[h+1] && vtest_hit[h] == 1){
-                UNO0.push_back(integrale(10, wf));
-                UNO0B.push_back(coordypic(wf));
-
-                tree -> GetEntry(h+1);
-
-                UNO1.push_back(integrale(10, wf));
-                UNO1B.push_back(coordypic(wf));
-            }
-    }
-
-
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Plotting
 
     //Pour les ratios de Q1/Q0 et Q2/Q1
-    std::vector<double> ratio_ZERO;
-    std::vector<double> ratio_UNO;
+    std::vector<double> ratio_ZERO_c;
+    std::vector<double> ratio_UNO_c;
 
-    for (size_t i = 0; i < ZERO0.size(); ++i) {
-            ratio_ZERO.push_back((double)ZERO1[i] / ZERO0[i]);
+    for (size_t i = 0; i < Q0_s_Q1_c.size(); ++i) {
+            ratio_ZERO_c.push_back((double)Q1_c[i] / Q0_s_Q1_c[i]);
         }
 
-    for (size_t i = 0; i < UNO0.size(); ++i) {
-            ratio_UNO.push_back((double)UNO1[i] / UNO0[i]);
+    for (size_t i = 0; i < Q1_s_Q2_c.size(); ++i) {
+            ratio_UNO_c.push_back((double)Q2_c[i] / Q1_s_Q2_c[i]);
         }
 
 
-    std::vector<double> ratio_ZEROB;
-    std::vector<double> ratio_UNOB;
+    std::vector<double> ratio_ZERO_a;
+    std::vector<double> ratio_UNO_a;
 
-    for (size_t i = 0; i < ZERO0B.size(); ++i) {
-            ratio_ZEROB.push_back((double)ZERO1B[i] / ZERO0B[i]);
-        }
+    for (size_t i = 0; i < Q0_s_Q1_a.size(); ++i) {
+        ratio_ZERO_a.push_back((double)Q1_a[i] / Q0_s_Q1_a[i]);
+    }
 
-    for (size_t i = 0; i < UNO0B.size(); ++i) {
-            ratio_UNOB.push_back((double)UNO1B[i] / UNO0B[i]);
-        }
-
+    for (size_t i = 0; i < Q1_s_Q2_c.size(); ++i) {
+        ratio_UNO_a.push_back((double)Q2_a[i] / Q1_s_Q2_a[i]);
+    }
 
 
     TCanvas * myc = new TCanvas();
@@ -430,6 +438,66 @@ void plot_wf(int argc, char** argv) {
         myl -> AddEntry(wf_4 , "hit_3");
 
     myl -> Draw("same");
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    TH1F* h_charge_1 = new TH1F("h_charge_1", "Charge comparison;Charge;Entries", 100, 0, 500);
+    for (double val : CHARGE_1){
+            h_charge_1->Fill(val);
+        }
+
+    TH1F* h_charge_plus = new TH1F("h_charge_plus", "Charge comparison;Charge;Entries", 100, 0, 500);
+    for (double val : CHARGE_PLUS_QUE_1){
+        h_charge_plus->Fill(val);
+    }
+
+
+
+    TCanvas* c_charge = new TCanvas("c_charge", "Charge per cluster size", 800, 600);
+
+    h_charge_1 -> SetLineColor(1);
+    h_charge_plus -> SetLineColor(2);
+
+    h_charge_1 -> Draw();
+    h_charge_plus -> Draw("SAME");
+
+    TLegend* leg_charge = new TLegend(0.7, 0.75, 0.9, 0.9);
+    leg_charge -> AddEntry(h_charge_1, "clusters avec 1 hit ", "l");
+    leg_charge -> AddEntry(h_charge_plus, "clusters avec plus que 1 hit", "l");
+    leg_charge -> Draw();
+    c_charge->Draw();
+    c_charge->Update();
+
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+    TH1F * h_amp_1 = new TH1F("h_amp_1", "Amplitude comparison;Amplitude;Entries", 100, 0, 500);
+    TH1F * h_amp_plus = new TH1F("h_amp_plus", "Amplitude comparison;Amplitude;Entries", 100, 0, 500);
+
+    for (float val : AMPLITUDE_1)
+        h_amp_1 -> Fill(val);
+
+    for (float val : AMPLITUDE_PLUS_QUE_1)
+        h_amp_plus -> Fill(val);
+
+    TCanvas * c_amp = new TCanvas("c_amp", "Amplitude per cluster size", 800, 600);
+    h_amp_1 -> SetLineColor(3);
+    h_amp_plus -> SetLineColor(4);
+
+    h_amp_1 -> Draw();
+    h_amp_plus -> Draw("SAME");
+
+    TLegend * leg_amp = new TLegend(0.7, 0.75, 0.9, 0.9);
+    leg_amp -> AddEntry(h_amp_1, "cluster avec un hit ", "l");
+    leg_amp -> AddEntry(h_amp_plus, "cluster avec plus que 1 hit", "l");
+    leg_amp -> Draw();
+    c_amp->Draw();
+    c_amp->Update();
+
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -518,22 +586,22 @@ void plot_wf(int argc, char** argv) {
 
     //Histogramme QO_A sachant qu'il existe Q1
     TH1F *h_Q0_s_Q1 = new TH1F("Q0_sachant_Q1_A", "Q0_sachant_Q1_A", 100, 0, 1400);
-    for (double r : ZERO0B) h_Q0_s_Q1 -> Fill(r);
+    for (double r : Q0_s_Q1_a) h_Q0_s_Q1 -> Fill(r);
     h_Q0_s_Q1 -> Write();
 
     //Histogramme de Q1
     TH1F *h_Q1 = new TH1F("Q1_A", "Q1_A", 100, 0, 1400);
-    for (double r : UNO0B) h_Q1 -> Fill(r);
+    for (double r : Q1_a) h_Q1 -> Fill(r);
     h_Q1 -> Write();
 
     //Histogramme Q1_A sachant qu'il existe Q2
     TH1F *h_Q1_s_Q2= new TH1F("Q1_sachant_Q2_A", "Q1_sachant_Q2_A", 100, 0, 1400);
-    for (double r : ZERO1B) h_Q1_s_Q2 -> Fill(r);
+    for (double r : Q1_s_Q2_a) h_Q1_s_Q2 -> Fill(r);
     h_Q1_s_Q2-> Write();
 
     //Histogramme de Q2
     TH1F *h_Q2 = new TH1F("Q2_A", "Q2_A", 100, 0, 1400);
-    for (double r : UNO1B) h_Q2 -> Fill(r);
+    for (double r : Q2_a) h_Q2 -> Fill(r);
     h_Q2 -> Write();
 
 
@@ -559,42 +627,27 @@ void plot_wf(int argc, char** argv) {
 
     //Histo du ratio des charges
     TH1F *h_ratio_ZERO = new TH1F("Q1_sur_Q0_charge", "Ratio Q1/Q0;Ratio;Nombre d'entrees", 50, 0, 2);
-    for (double r : ratio_ZERO) h_ratio_ZERO -> Fill(r);
+    for (double r : ratio_ZERO_c) h_ratio_ZERO -> Fill(r);
     h_ratio_ZERO -> Write();
 
     TH1F *h_ratio_UNO = new TH1F("Q2_sur_Q1_charge", "Ratio Q2/Q1;Ratio;Nombre d'entrees", 50, 0, 2);
-    for (double r : ratio_UNO) h_ratio_UNO -> Fill(r);
+    for (double r : ratio_UNO_c) h_ratio_UNO -> Fill(r);
     h_ratio_UNO -> Write();
 
 
-    //Histo du ln du ratio des charges
-    TH1F *h_lnratio_ZERO = new TH1F("log_Q1_sur_Q0_charge", "lnQ1/Q0;Ratio;Nombre d'entrees", 100, -5, 5);
-    for (double r : ratio_ZERO) h_lnratio_ZERO -> Fill(std::log(r));
-    h_lnratio_ZERO -> Write();
 
-    TH1F *h_lnratio_UNO = new TH1F("log_Q2_sur_Q1_charge", "lnQ2/Q1 Charge;Ratio;Nombre d'entrees", 100, -5, 5);
-    for (double r : ratio_UNO) h_lnratio_UNO -> Fill(std::log(r));
-    h_lnratio_UNO -> Write();
 
 
     //Histo du ratio des amplitudes
     TH1F *h_ratio_ZEROB = new TH1F("Q1_sur_Q0_amplitude", "Ratio Q1/Q0;Ratio;Nombre d'entrees", 50, 0, 2);
-    for (double r : ratio_ZEROB) h_ratio_ZEROB -> Fill(r);
+    for (double r : ratio_ZERO_a) h_ratio_ZEROB -> Fill(r);
     h_ratio_ZEROB -> Write();
 
     TH1F *h_ratio_UNOB = new TH1F("Q2_sur_Q1_amplitude", "Ratio Q2/Q1;Ratio;Nombre d'entrees", 50, 0, 2);
-    for (double r : ratio_UNOB) h_ratio_UNOB -> Fill(r);
+    for (double r : ratio_UNO_a) h_ratio_UNOB -> Fill(r);
     h_ratio_UNOB -> Write();
 
 
-    //Histo du ln du ratio des amplitudes
-    TH1F *h_lnratio_ZEROB = new TH1F("log_Q1_sur_Q0_amplitude", "lnQ1/Q0;Ratio;Nombre d'entrees", 100, -5, 5);
-    for (double r : ratio_ZEROB) h_lnratio_ZEROB -> Fill(std::exp(log(r)));
-    h_lnratio_ZEROB -> Write();
-
-    TH1F *h_lnratio_UNOB = new TH1F("log_Q2_sur_Q1_amplitude", "lnQ2/Q1 ;Ratio;Nombre d'entrees", 100, -5, 5);
-    for (double r : ratio_UNOB) h_lnratio_UNOB -> Fill(std::log(r));
-    h_lnratio_UNOB -> Write();
 
 
 
@@ -643,46 +696,6 @@ void plot_wf(int argc, char** argv) {
     c_ratio_02 -> Write();
 
 
-
-
-    TCanvas *c_lnratio_01 = new TCanvas("c_lnratio_01");
-    h_lnratio_ZEROB -> SetLineColor(1);
-    h_lnratio_ZERO->SetLineColor(2);
-
-    double max5 = h_lnratio_ZEROB -> GetMaximum();
-    double max6 = h_lnratio_ZERO -> GetMaximum();
-    double ymax3 = std::max( max5, max6) * 1.1;
-    h_lnratio_ZEROB  -> SetMaximum(ymax);
-    h_lnratio_ZERO -> SetMaximum(ymax);
-
-    h_lnratio_ZEROB -> Draw();
-    h_lnratio_ZERO -> Draw("SAME");
-    TLegend *legln1 = new TLegend(0.7, 0.7, 0.9, 0.9);
-    legln1 -> AddEntry(h_lnratio_ZEROB, "ln (Q1 / Q0) Amplitude", "l");
-    legln1 -> AddEntry(h_lnratio_ZERO, "ln (Q1 / Q0) Charge", "l");
-    legln1 -> Draw();
-    c_lnratio_01 -> Write();
-
-
-
-
-    TCanvas *c_lnratio_02 = new TCanvas("c_lnratio_02");
-    h_lnratio_UNOB -> SetLineColor(1);
-    h_lnratio_UNO->SetLineColor(2);
-
-    double max8 = h_lnratio_UNOB -> GetMaximum();
-    double max7 = h_lnratio_UNO -> GetMaximum();
-    double ymax4 = std::max( max7, max8) * 1.1;
-    h_lnratio_UNOB  -> SetMaximum(ymax);
-    h_lnratio_UNO -> SetMaximum(ymax);
-
-    h_lnratio_UNOB -> Draw();
-    h_lnratio_UNO -> Draw("SAME");
-    TLegend *legln2 = new TLegend(0.7, 0.7, 0.9, 0.9);
-    legln2 -> AddEntry(h_lnratio_UNOB, "ln (Q2 / Q1) Amplitude", "l");
-    legln2 -> AddEntry(h_lnratio_UNO, "ln (Q2 / Q1) Charge", "l");
-    legln2 -> Draw();
-    c_lnratio_02 -> Write();
 
 
 // CURVE FIT A FAIRE
