@@ -19,8 +19,12 @@
 double R = 100;
 double C = 1;
 int bord = 40;
-int N_hits = 100000;  // nombre max de hits à traiter
-int ADC = 100; //Amplitude en dessous de laquelle on a du bruit
+int N_hits = 10000;  // nombre max de hits à traiter
+int ADC = 10; //Amplitude en dessous de laquelle on a du bruit
+int X_charge = 18000;
+int X_amplitude = 2500;
+int bin_amplitude = 200;
+int bin_charge = 100;
 
 void plot_wf(int argc, char** argv);
 int main(int argc, char** argv) {
@@ -28,7 +32,6 @@ int main(int argc, char** argv) {
         std::cerr << "Usage: " << argv[0] << " <input_data_file> <output_root_file>\n";
         return 1;
     }
-
     plot_wf(argc, argv);
 
 }
@@ -99,20 +102,16 @@ void histo(TTree *tree, int hit_filter,TH1F *h_charge, TH1F *h_peak_time, TH1F *
     Int_t cluster_per_trace;
     tree -> SetBranchAddress("trk_ncl", &cluster_per_trace);
 
-
     int hit;
     TGraph *wf = nullptr;
-
 
     tree -> SetBranchAddress("hit", &hit);
     tree -> SetBranchAddress("WF", &wf);
 
     int nentries = tree -> GetEntries();
-
-
-    for (int i = 0; i < nentries && charges.size() < N_hits; ++i) {
+    for (int i = 0; i < nentries && i < N_hits; ++i) {
         tree->GetEntry(i);
-        //if (cluster_per_trace > bord){
+        if (cluster_per_trace > bord){
 
             if (hit == hit_filter) {
                 double charge = integrale(10, wf);
@@ -122,7 +121,7 @@ void histo(TTree *tree, int hit_filter,TH1F *h_charge, TH1F *h_peak_time, TH1F *
                 charges.push_back(charge);
                 peak_times.push_back(t_at_max);
                 max_amplitudes.push_back(v_max);
-                //}
+            }
         }
 
     }
@@ -173,17 +172,7 @@ void plot_wf(int argc, char** argv) {
     std::vector<double> CHARGE_PLUS_QUE_1;
 
 
-
-    int count_hit0 = 0;
-    int count_hit1 = 0;
-    int count_hit2 = 0;
-    int count_hit3 = 0;
-    int test_hit = 0;
-
-    //Vecteur test pour hit/cluster
-    std::vector<int> vtest_hit;
-
-    //Vecteur à remplir por histo des clusters par trace
+    //Vecteur à remplir pour histo des clusters par trace
     std::vector<int> cluster_par_trace;
 
     //Vecteur à remplir pour avoir un histogramme de hits par cluster
@@ -259,59 +248,54 @@ void plot_wf(int argc, char** argv) {
     std::vector<int> UNO;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//HISTO DES CLUSTERS PAR TRACE ET COUPURE
+
+    int temp_cluster_per_trace;
+    tree -> GetEntry(0);
+    temp_cluster_per_trace = cluster_per_trace;
+    std::vector<int> hit_count;
+    std::vector<int> hit_count_temp;
+
 
     // Reading TTree and filling data of interest
     for (int i = 0; i < nentries && i < N_hits ; ++i) {
+
         tree -> GetEntry(i);
         if (cluster_per_trace > bord){  //On regarde si on a bien un nombre de cluster assez grand qui signifie que l'on a bien un trace est pas du bruit
 
-
-        int test_trk = 0;  //On initialise les test pour avoir les clusters par trace
-        int test_trk1 = 0;
-
-
-        test_trk = cluster_per_trace;
-        tree -> GetEntry(i+1);
-        test_trk1 = cluster_per_trace;
-
-        if (test_trk != test_trk1){  //on regarde si on est dans la même trace
-            cluster_par_trace.push_back(test_trk);
-            }
+        if (temp_cluster_per_trace != cluster_per_trace){  //on regarde si on est dans la même trace
+            cluster_par_trace.push_back(temp_cluster_per_trace);
+        }
+        temp_cluster_per_trace = cluster_per_trace;
 
 
-        tree -> GetEntry(i);
-
+        //pour faire Q1/Q0 en amplitude et en charge
         if (hit == 0 && clu_size > 1){
             Q0_s_Q1_c.push_back(integrale(10, wf));
             Q0_s_Q1_a.push_back(coordypic(wf));
+        }
 
-            tree -> GetEntry(i+1);
-
+        if (hit == 1){
             Q1_c.push_back(integrale(10, wf));
             Q1_a.push_back(coordypic(wf));
         }
 
-        tree -> GetEntry(i);
-
+        //Pour faire Q2/Q1 en amplitude et en charge
         if (hit == 1 && clu_size > 2){
             Q1_s_Q2_c.push_back(integrale(10, wf));
             Q1_s_Q2_a.push_back(coordypic(wf));
+        }
 
-            tree -> GetEntry(i+1);
-
+        if (hit == 2){
             Q2_c.push_back(integrale(10, wf));
             Q2_a.push_back(coordypic(wf));
         }
 
-        tree -> GetEntry(i);
-
-
-        if (clu_size == 1){
+        //Pour "split" les différentes composantes des hits 0 :celles oùil n'y a qu'un hit par cluster ou plus
+        if (clu_size == 1 && hit == 0){
            AMPLITUDE_1.push_back(coordypic(wf));
            CHARGE_1.push_back(integrale(10,wf));
         }
-        if (clu_size > 1){
+        if (clu_size > 1 && hit == 0){
            AMPLITUDE_PLUS_QUE_1.push_back(coordypic(wf));
            CHARGE_PLUS_QUE_1.push_back(integrale(10,wf));
         }
@@ -320,17 +304,7 @@ void plot_wf(int argc, char** argv) {
 
         //if (event == look_event && pattern == look_pattern && cluster == look_cluster) {
             if (hit == 0){
-
-            vtest_hit.push_back(0);
-
-            double charge = integrale(10, wf);
-            double val_lim = coordypic(wf);
-
-
-             //std::cout << "t_at_max ="  <<coordxpic(wf) << std::endl;
-             //std::cout << "max_value =" <<coordypic(wf) << std::endl;
-             //std::cout << "charge ="    <<integrale(0.05 * val_lim , wf) << std::endl;
-
+                hit_count_temp.push_back(0);
                 for (int j = 0; j < wf->GetN(); ++j) {
                     double t, q;
                     wf     -> GetPoint(j, t, q);
@@ -339,7 +313,7 @@ void plot_wf(int argc, char** argv) {
             }
 
             if (hit == 1){
-                vtest_hit.push_back(1);
+                hit_count_temp.push_back(1);
                 for (int j = 0; j < wf->GetN(); ++j) {
                     double t, q;
                     wf     -> GetPoint(j, t, q);
@@ -347,8 +321,7 @@ void plot_wf(int argc, char** argv) {
                 }
             }
             if (hit == 2){
-                vtest_hit.push_back(2);
-                count_hit2++;
+                hit_count_temp.push_back(2);
                 for (int j = 0; j < wf->GetN(); ++j) {
                     double t, q;
                     wf     -> GetPoint(j, t, q);
@@ -356,7 +329,7 @@ void plot_wf(int argc, char** argv) {
                 }
             }
             if (hit == 3){
-                vtest_hit.push_back(3);
+                hit_count_temp.push_back(3);
                 for (int j = 0; j < wf->GetN(); ++j) {
                     double t, q;
                     wf     -> GetPoint(j, t, q);
@@ -364,12 +337,14 @@ void plot_wf(int argc, char** argv) {
                 }
             }
         //}
+        for (int n =0; n < hit_count_temp.size(); ++n){
+            if (hit_count_temp[n] + 1 != hit_count_temp[n+1]){
+                hit_count.push_back(hit_count_temp.size());
+                hit_count_temp.clear();
+            }
         }
     }
-    //Traitement des hits
-
-
-
+}
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -438,65 +413,6 @@ void plot_wf(int argc, char** argv) {
         myl -> AddEntry(wf_4 , "hit_3");
 
     myl -> Draw("same");
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-    TH1F* h_charge_1 = new TH1F("h_charge_1", "Charge comparison;Charge;Entries", 100, 0, 500);
-    for (double val : CHARGE_1){
-            h_charge_1->Fill(val);
-        }
-
-    TH1F* h_charge_plus = new TH1F("h_charge_plus", "Charge comparison;Charge;Entries", 100, 0, 500);
-    for (double val : CHARGE_PLUS_QUE_1){
-        h_charge_plus->Fill(val);
-    }
-
-
-
-    TCanvas* c_charge = new TCanvas("c_charge", "Charge per cluster size", 800, 600);
-
-    h_charge_1 -> SetLineColor(1);
-    h_charge_plus -> SetLineColor(2);
-
-    h_charge_1 -> Draw();
-    h_charge_plus -> Draw("SAME");
-
-    TLegend* leg_charge = new TLegend(0.7, 0.75, 0.9, 0.9);
-    leg_charge -> AddEntry(h_charge_1, "clusters avec 1 hit ", "l");
-    leg_charge -> AddEntry(h_charge_plus, "clusters avec plus que 1 hit", "l");
-    leg_charge -> Draw();
-    c_charge->Draw();
-    c_charge->Update();
-
-
-
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-    TH1F * h_amp_1 = new TH1F("h_amp_1", "Amplitude comparison;Amplitude;Entries", 100, 0, 500);
-    TH1F * h_amp_plus = new TH1F("h_amp_plus", "Amplitude comparison;Amplitude;Entries", 100, 0, 500);
-
-    for (float val : AMPLITUDE_1)
-        h_amp_1 -> Fill(val);
-
-    for (float val : AMPLITUDE_PLUS_QUE_1)
-        h_amp_plus -> Fill(val);
-
-    TCanvas * c_amp = new TCanvas("c_amp", "Amplitude per cluster size", 800, 600);
-    h_amp_1 -> SetLineColor(3);
-    h_amp_plus -> SetLineColor(4);
-
-    h_amp_1 -> Draw();
-    h_amp_plus -> Draw("SAME");
-
-    TLegend * leg_amp = new TLegend(0.7, 0.75, 0.9, 0.9);
-    leg_amp -> AddEntry(h_amp_1, "cluster avec un hit ", "l");
-    leg_amp -> AddEntry(h_amp_plus, "cluster avec plus que 1 hit", "l");
-    leg_amp -> Draw();
-    c_amp->Draw();
-    c_amp->Update();
-
 
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -507,13 +423,12 @@ void plot_wf(int argc, char** argv) {
 
     for (int hit_filter = 0; hit_filter <=3; ++hit_filter) {
         // Création des histogrammes
-        TH1F *h_charge    = new TH1F(Form("h_charge_hit%d",    hit_filter), Form("Distribution des charges (hit=%d);Charge;Nombre de hits", hit_filter), 50, 0, 15000);
+        TH1F *h_charge    = new TH1F(Form("h_charge_hit%d",    hit_filter), Form("Distribution des charges (hit=%d);Charge;Nombre de hits", hit_filter), bin_charge, 0, X_charge);
         TH1F *h_peak_time = new TH1F(Form("h_peak_time_hit%d", hit_filter), Form("Temps du pic max (hit=%d);Temps (ns);Nombre de hits",     hit_filter), 50, 0, 511);
-        TH1F *h_amplitude = new TH1F(Form("h_amplitude_hit%d", hit_filter), Form("Amplitude max (hit=%d);Amplitude (ADC);Nombre de hits",   hit_filter), 100, 0, 1000);
+        TH1F *h_amplitude = new TH1F(Form("h_amplitude_hit%d", hit_filter), Form("Amplitude max (hit=%d);Amplitude (ADC);Nombre de hits",   hit_filter), bin_amplitude, 0, X_amplitude);
 
         //on remplit les histogrammes
         histo(tree, hit_filter, h_charge, h_peak_time, h_amplitude);
-
 
         h_charge ->   Write();
         h_peak_time -> Write();
@@ -532,9 +447,8 @@ void plot_wf(int argc, char** argv) {
         h_amplitude -> Draw();
         c_amplitude -> Update();
 
-
-
         }
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -550,6 +464,9 @@ void plot_wf(int argc, char** argv) {
     h1 -> SetLineColor(2);
     h2 -> SetLineColor(3);
     h3 -> SetLineColor(4);
+
+    float max_val = std::max({h0 -> GetMaximum(), h1 -> GetMaximum(), h2 -> GetMaximum(), h3 -> GetMaximum()});
+    h0 -> SetMaximum(1.1 * max_val);
 
     h0 -> Draw();
     h1 -> Draw("same");
@@ -581,40 +498,60 @@ void plot_wf(int argc, char** argv) {
 
     outfile -> cd();
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //On travaille en amplitude
     //Histogramme QO_A sachant qu'il existe Q1
-    TH1F *h_Q0_s_Q1 = new TH1F("Q0_sachant_Q1_A", "Q0_sachant_Q1_A", 100, 0, 1400);
-    for (double r : Q0_s_Q1_a) h_Q0_s_Q1 -> Fill(r);
+    TH1F *h_Q0_s_Q1B = new TH1F("Q0_sachant_Q1_A", "Q0_sachant_Q1_A", bin_amplitude, 0, X_amplitude);
+    for (double r : Q0_s_Q1_a) h_Q0_s_Q1B -> Fill(r);
+    h_Q0_s_Q1B -> Write();
+
+    //Histogramme de Q1
+    TH1F *h_Q1B = new TH1F("Q1_A", "Q1_A", bin_amplitude, 0, X_amplitude);
+    for (double r : Q1_a) h_Q1B -> Fill(r);
+    h_Q1B -> Write();
+
+    //Histogramme Q1_A sachant qu'il existe Q2
+    TH1F *h_Q1_s_Q2B = new TH1F("Q1_sachant_Q2_A", "Q1_sachant_Q2_A", bin_amplitude, 0, X_amplitude);
+    for (double r : Q1_s_Q2_a) h_Q1_s_Q2B -> Fill(r);
+    h_Q1_s_Q2B-> Write();
+
+    //Histogramme de Q2
+    TH1F *h_Q2B = new TH1F("Q2_A", "Q2_A", bin_amplitude, 0, X_amplitude);
+    for (double r : Q2_a) h_Q2B -> Fill(r);
+    h_Q2B -> Write();
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    //On travaille en charge
+    //Histogramme QO_c sachant qu'il existe Q1
+    TH1F *h_Q0_s_Q1 = new TH1F("Q0_sachant_Q1_C", "Q0_sachant_Q1_C", bin_charge, 0, X_charge);
+    for (double r : Q0_s_Q1_c) h_Q0_s_Q1 -> Fill(r);
     h_Q0_s_Q1 -> Write();
 
     //Histogramme de Q1
-    TH1F *h_Q1 = new TH1F("Q1_A", "Q1_A", 100, 0, 1400);
-    for (double r : Q1_a) h_Q1 -> Fill(r);
+    TH1F *h_Q1 = new TH1F("Q1_C", "Q1_C", bin_charge, 0, X_charge);
+    for (double r : Q1_c) h_Q1 -> Fill(r);
     h_Q1 -> Write();
 
     //Histogramme Q1_A sachant qu'il existe Q2
-    TH1F *h_Q1_s_Q2= new TH1F("Q1_sachant_Q2_A", "Q1_sachant_Q2_A", 100, 0, 1400);
-    for (double r : Q1_s_Q2_a) h_Q1_s_Q2 -> Fill(r);
+    TH1F *h_Q1_s_Q2 = new TH1F("Q1_sachant_Q2_C", "Q1_sachant_Q2_C", bin_charge, 0, X_charge);
+    for (double r : Q1_s_Q2_c) h_Q1_s_Q2 -> Fill(r);
     h_Q1_s_Q2-> Write();
 
     //Histogramme de Q2
-    TH1F *h_Q2 = new TH1F("Q2_A", "Q2_A", 100, 0, 1400);
-    for (double r : Q2_a) h_Q2 -> Fill(r);
+    TH1F *h_Q2 = new TH1F("Q2_C", "Q2_C", bin_charge, 0, X_charge);
+    for (double r : Q2_c) h_Q2 -> Fill(r);
     h_Q2 -> Write();
 
-
-
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     //Histo du nombre de hits par cluster
     TH1F *hist = new TH1F("hit_per_cluster", "Histo des hit/cluster;Hit N;Nombre de cluster avec N hits", 6, 0, 6);
-    for (int val : hit_average) {
+    for (int val : hit_count
+) {
         hist -> Fill(val);
     }
     hist->Write();
-
-
 
     //Histo du nombre de cluster par trace
     TH1F *h_cluster_par_trace = new TH1F("cluster_per_trace", "Clusters per trace", 100, 0, 100);
@@ -625,7 +562,7 @@ void plot_wf(int argc, char** argv) {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    //Histo du ratio des charges
+    //Histo des ratios Q1/Q0 et Q2/Q1 en amplitude et charge
     TH1F *h_ratio_ZERO = new TH1F("Q1_sur_Q0_charge", "Ratio Q1/Q0;Ratio;Nombre d'entrees", 50, 0, 2);
     for (double r : ratio_ZERO_c) h_ratio_ZERO -> Fill(r);
     h_ratio_ZERO -> Write();
@@ -633,10 +570,6 @@ void plot_wf(int argc, char** argv) {
     TH1F *h_ratio_UNO = new TH1F("Q2_sur_Q1_charge", "Ratio Q2/Q1;Ratio;Nombre d'entrees", 50, 0, 2);
     for (double r : ratio_UNO_c) h_ratio_UNO -> Fill(r);
     h_ratio_UNO -> Write();
-
-
-
-
 
     //Histo du ratio des amplitudes
     TH1F *h_ratio_ZEROB = new TH1F("Q1_sur_Q0_amplitude", "Ratio Q1/Q0;Ratio;Nombre d'entrees", 50, 0, 2);
@@ -649,17 +582,12 @@ void plot_wf(int argc, char** argv) {
 
 
 
-
-
-
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Superposition des histogrammes dans un Canvas
     TCanvas *c_ratio_01 = new TCanvas("c_ratio_01");
     h_ratio_ZEROB -> SetLineColor(1);
     h_ratio_ZERO ->  SetLineColor(2);
-
     double max1 = h_ratio_ZEROB -> GetMaximum();
     double max2 = h_ratio_ZERO -> GetMaximum();
     double ymax = std::max( max1, max2) * 1.1;
@@ -674,18 +602,16 @@ void plot_wf(int argc, char** argv) {
     leg1 -> Draw();
     c_ratio_01 -> Write();
 
-
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     TCanvas *c_ratio_02 = new TCanvas("c_ratio_02");
     h_ratio_UNOB -> SetLineColor(1);
     h_ratio_UNO -> SetLineColor(2);
-
     double max3 = h_ratio_UNOB -> GetMaximum();
     double max4 = h_ratio_UNO -> GetMaximum();
     double ymax2 = std::max( max3, max4) * 1.1;
-    h_ratio_UNOB -> SetMaximum(ymax);
-    h_ratio_UNO -> SetMaximum(ymax);
+    h_ratio_UNOB -> SetMaximum(ymax2);
+    h_ratio_UNO -> SetMaximum(ymax2);
 
     h_ratio_UNOB -> Draw();
     h_ratio_UNO -> Draw("SAME");
@@ -695,6 +621,71 @@ void plot_wf(int argc, char** argv) {
     leg2 -> Draw();
     c_ratio_02 -> Write();
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    TH1F* h_charge_1 = new TH1F("h_charge_1", "Charge comparaison;Charge;Nombre de hits", bin_charge, 0, X_charge);
+    for (double val : CHARGE_1) h_charge_1->Fill(val);
+
+    TH1F* h_charge_plus = new TH1F("h_charge_plus", "Charge comparaison;Charge;Nombre de hits", bin_charge, 0, X_charge);
+    for (double val : CHARGE_PLUS_QUE_1) h_charge_plus->Fill(val);
+
+    TCanvas* c_charge = new TCanvas("c_charge_split");
+
+    h_charge_1 -> SetLineColor(1);
+    h_charge_plus -> SetLineColor(2);
+
+    double maxc1 = h_charge_1 -> GetMaximum();
+    double maxc2 = h_charge_plus -> GetMaximum();
+    double ymax3 = std::max( maxc1, maxc2) * 1.1;
+    h_charge_1 -> SetMaximum(ymax3);
+    h_charge_plus -> SetMaximum(ymax3);
+    h_charge_1->GetXaxis()->SetRangeUser(0, X_charge);
+    h_charge_1 -> Draw();
+    h_charge_plus -> Draw("SAME");
+
+
+    TLegend *leg_charge = new TLegend(0.7, 0.75, 0.9, 0.9);
+    leg_charge -> AddEntry(h_charge_1, "clusters avec 1 hit ", "l");
+    leg_charge -> AddEntry(h_charge_plus, "clusters avec plus que 1 hit", "l");
+    leg_charge -> Draw();
+    c_charge -> Draw();
+    c_charge -> Write();
+    c_charge -> Update();
+
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+    TH1F * h_amp_1 = new TH1F("h_amp_1", "Amplitude comparison;Amplitude;Entries", bin_amplitude, 0, X_amplitude);
+    TH1F * h_amp_plus = new TH1F("h_amp_plus", "Amplitude comparison;Amplitude;Entries", bin_amplitude, 0, X_amplitude);
+
+    for (double val : AMPLITUDE_1)
+        h_amp_1 -> Fill(val);
+
+    for (double val : AMPLITUDE_PLUS_QUE_1)
+        h_amp_plus -> Fill(val);
+
+    TCanvas * c_amp = new TCanvas("c_amp_split", "Amplitude per cluster size");
+    h_amp_1 -> SetLineColor(3);
+    h_amp_plus -> SetLineColor(4);
+
+    double maxa1 = h_amp_1 -> GetMaximum();
+    double maxa2 = h_amp_plus -> GetMaximum();
+    double ymax4 = std::max( maxa1, maxa2) * 1.1;
+    h_amp_1 -> SetMaximum(ymax4);
+    h_amp_plus -> SetMaximum(ymax4);
+
+    h_amp_1->GetXaxis()->SetRangeUser(0, X_amplitude);
+    h_amp_1 -> Draw();
+    h_amp_plus -> Draw("SAME");
+
+    TLegend * leg_amp = new TLegend(0.7, 0.75, 0.9, 0.9);
+    leg_amp -> AddEntry(h_amp_1, "cluster avec un hit ", "l");
+    leg_amp -> AddEntry(h_amp_plus, "cluster avec plus que 1 hit", "l");
+    leg_amp -> Draw();
+    c_amp -> Draw();
+    c_amp -> Write();
+    c_amp -> Update();
 
 
 
@@ -727,11 +718,4 @@ void plot_wf(int argc, char** argv) {
 //puis on calculeera l'écart type
 
 
-
-
-
-//lancer le code  avec des vraies données
-
 //faire un fit sur les derniers histos obtenus
-//comment utiliser git
-// faire git push()
