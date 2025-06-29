@@ -1,10 +1,10 @@
 {
 
-    TFile * f1 = TFile::Open("int.root");
+    TFile * f1 = TFile::Open("/Users/wsaenzar/post/nd/stage_lpnhe/build/int.root");
 
     TH1F * inte = (TH1F*) f1 -> Get("residuals");
 
-    TFile * f2 = TFile::Open("amp.root");
+    TFile * f2 = TFile::Open("/Users/wsaenzar/post/nd/stage_lpnhe/build/amp.root");
 
     TH1F * ampl = (TH1F*) f2 -> Get("residuals");
 
