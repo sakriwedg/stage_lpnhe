@@ -18,7 +18,10 @@
 #include <TPaveText.h>
 #include <cmath>
 #include <iostream>
-
+#include <iomanip>  // for std::setw
+#include <chrono>
+#include <thread>   // for std::this_thread::sleep_for
+#include <filesystem>
 
 int bord = 40;
 int N_hits = 1000000;  // nombre max de hits à traiter
@@ -32,22 +35,268 @@ int bin_charge = 100;
 
 
 void plot_wf(int argc, char** argv);
-int main(int argc, char** argv) {
-    if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <input_data_file> <output_root_file>\n";
-        return 1;
+
+
+
+
+
+bool save_plots = false; // prints example plots of track fit
+bool use_integral = true; // if false it uses amplitude for barycenter calculation
+
+void printProgressBar(float progress) {
+    const int barWidth = 50;
+    std::cout << "[";
+    int pos = static_cast<int>(barWidth * progress);
+
+    for (int i = 0; i < barWidth; ++i) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
     }
-    plot_wf(argc, argv);
+
+    std::cout << "] " << int(progress * 100.0) << " %\r";
+    std::cout.flush();
+}
+
+struct TClusterFeatures {
+    std::vector<double> time, phi, x, z, y, dir_x, dir_y, dir_z, err, q;
+    std::vector<double> y_eram, z_eram;
+    std::vector<int> ori, size;
+
+    void clear() {
+        time.clear(); phi.clear(); x.clear(); z.clear(); y.clear();
+        dir_x.clear(); dir_y.clear(); dir_z.clear(); err.clear(); q.clear();
+        y_eram.clear(); z_eram.clear();
+        ori.clear(); size.clear();
+    }
+};
+
+double GetBarycenter_Z(double z0, double z1, double z2,
+                       double q0, double q1, double q2,
+                       bool h0, bool h1, bool h2) {
+    double sum = 0.0, total = 0.0;
+
+    if (h0) { sum += z0 * q0; total += q0; }
+    if (h1) { sum += z1 * q1; total += q1; }
+    if (h2) { sum += z2 * q2; total += q2; }
+
+    return (total == 0.0) ? 0.0 : sum / total;
+}
+
+double GetBarycenter_Z_Error(double z0, double z1, double z2,
+                              double q0, double q1, double q2,
+                              bool h0, bool h1, bool h2) {
+    double sum = 0.0, weight = 0.0;
+
+    if (h0) { sum += z0 * q0; weight += q0; }
+    if (h1) { sum += z1 * q1; weight += q1; }
+    if (h2) { sum += z2 * q2; weight += q2; }
+
+    if (weight == 0.0) return 0.0;
+
+    double zbar = sum / weight;
+    double var = 0.0;
+
+    if (h0) { double dz = z0 - zbar; var += q0 * dz * dz; }
+    if (h1) { double dz = z1 - zbar; var += q1 * dz * dz; }
+    if (h2) { double dz = z2 - zbar; var += q2 * dz * dz; }
+
+    return std::sqrt(var / weight);
+}
+
+Double_t GetIntegral(Double_t thr, TGraph* wf) {
+    double integral = 0.;
+
+    for (int j = 0; j < wf->GetN(); ++j)
+        if (wf->GetPointY(j) > thr) integral += wf->GetPointY(j);
+
+    return integral;
+}
+
+void FillMinMaxValues(TClusterFeatures &clus_features, double cenZ, double cenY,
+                      double &phi_min, double &phi_max) {
+    for (unsigned int i = 0; i < clus_features.z.size(); ++i) {
+        double dZ = clus_features.z[i] - cenZ;
+        double dY = clus_features.y[i] - cenY;
+        double phi = atan2(dY, dZ);
+
+        clus_features.phi.push_back(phi);
+
+        if (clus_features.size[i] > 0) {
+            if (phi_min > phi) phi_min = phi;
+            if (phi_max < phi) phi_max = phi;
+        }
+    }
+}
+
+
+void ProcessEvent(
+    TClusterFeatures &clu_feat,
+    TTree *tree,
+    Long64_t event,
+    TH1F *q0_amp_hist, TH1F *q1_amp_hist, TH1F *q2_amp_hist,
+    TH1F *q0_int_hist, TH1F *q1_int_hist, TH1F *q2_int_hist,
+    TH1F *q1_0_amp_hist, TH1F *q1_0_int_hist,
+    TH1F *q2_1_amp_hist, TH1F *q2_1_int_hist
+) {
+    tree->GetEntry(event);
+
+    // Structures temporaires pour regrouper les hits par y
+    std::map<double, std::vector<int Hit>> hits_by_y;
+
+    for (int i = 0; i < nhits; i++) {
+        if (hit_chip_id[i] == 999) continue; // hit invalide ?
+
+        // Sélection des hits valides
+        if (use_integral && hit_integral[i] < min_integral) continue;
+        if (!use_integral && hit_amplitude[i] < min_amplitude) continue;
+
+        // Sélection temporelle
+        if (hit_time[i] < t_min || hit_time[i] > t_max) continue;
+
+        double y = hit_pos_y[i];
+        hits_by_y[y].push_back({hit_pos_z[i], hit_amplitude[i], hit_integral[i], true});
+    }
+
+    for (const auto &[y0, hits] : hits_by_y) {
+        if (hits.size() < 3) continue;
+
+        // Tri des hits par position z croissante
+        std::vector<Hit> sorted_hits = hits;
+        std::sort(sorted_hits.begin(), sorted_hits.end(), [](const Hit &a, const Hit &b) {
+            return a.z < b.z;
+        });
+
+        // Balayage des hits trois par trois pour former des "clusters"
+        for (size_t i = 0; i + 2 < sorted_hits.size(); i++) {
+            const Hit &h0 = sorted_hits[i];
+            const Hit &h1 = sorted_hits[i + 1];
+            const Hit &h2 = sorted_hits[i + 2];
+
+            double dz1 = h1.z - h0.z;
+            double dz2 = h2.z - h1.z;
+
+            // On impose une proximité entre les hits en z
+            if (dz1 > max_delta_z || dz2 > max_delta_z) continue;
+
+            ProcessCluster(
+                clu_feat,
+                h0.amplitude, h1.amplitude, h2.amplitude,
+                h0.integral, h1.integral, h2.integral,
+                y0,
+                h0.z, h1.z, h2.z,
+                h0.valid, h1.valid, h2.valid,
+                3,
+                q0_amp_hist, q1_amp_hist, q2_amp_hist,
+                q0_int_hist, q1_int_hist, q2_int_hist,
+                q1_0_amp_hist, q1_0_int_hist,
+                q2_1_amp_hist, q2_1_int_hist
+            );
+        }
+    }
+}
+
+
+void ProcessFile(
+    const std::string &file_name,
+    TClusterFeatures &clu_feat,
+    TH1F *q0_amp_hist, TH1F *q1_amp_hist, TH1F *q2_amp_hist,
+    TH1F *q0_int_hist, TH1F *q1_int_hist, TH1F *q2_int_hist,
+    TH1F *q1_0_amp_hist, TH1F *q1_0_int_hist,
+    TH1F *q2_1_amp_hist, TH1F *q2_1_int_hist
+) {
+    std::unique_ptr<TFile> file(TFile::Open(file_name.c_str(), "READ"));
+    if (!file || file->IsZombie()) {
+        std::cerr << "Erreur à l'ouverture du fichier : " << file_name << std::endl;
+        return;
+    }
+
+    TTree *tree = dynamic_cast<TTree *>(file->Get("hit_tree"));
+    if (!tree) {
+        std::cerr << "Arbre 'hit_tree' non trouvé dans le fichier : " << file_name << std::endl;
+        return;
+    }
+
+    InitTree(tree);
+
+    Long64_t nentries = tree->GetEntries();
+    std::cout << "Traitement du fichier : " << file_name << " (" << nentries << " événements)" << std::endl;
+
+    for (Long64_t i = 0; i < nentries; i++) {
+        ProcessEvent(
+            clu_feat, tree, i,
+            q0_amp_hist, q1_amp_hist, q2_amp_hist,
+            q0_int_hist, q1_int_hist, q2_int_hist,
+            q1_0_amp_hist, q1_0_int_hist,
+            q2_1_amp_hist, q2_1_int_hist
+        );
+    }
+
+    file->Close();
+}
+
+
+
+
+void ProcessCluster(
+    TClusterFeatures &clu_feat,
+    double q0_amp, double q1_amp, double q2_amp,
+    double q0_int, double q1_int, double q2_int,
+    double y0,
+    double z0, double z1, double z2,
+    bool h0, bool h1, bool h2,
+    int clu_size,
+    TH1F *q0_amp_hist, TH1F *q1_amp_hist, TH1F *q2_amp_hist,
+    TH1F *q0_int_hist, TH1F *q1_int_hist, TH1F *q2_int_hist,
+    TH1F *q1_0_amp_hist, TH1F *q1_0_int_hist,
+    TH1F *q2_1_amp_hist, TH1F *q2_1_int_hist
+) {
+    if (h0) {
+        q0_amp_hist->Fill(q0_amp);
+        q0_int_hist->Fill(q0_int);
+    }
+
+    if (h1) {
+        q1_amp_hist->Fill(q1_amp);
+        q1_int_hist->Fill(q1_int);
+    }
+
+    if (h2) {
+        q2_amp_hist->Fill(q2_amp);
+        q2_int_hist->Fill(q2_int);
+    }
+
+    if (h0 && h1) {
+        q1_0_amp_hist->Fill(q1_amp / q0_amp);
+        q1_0_int_hist->Fill(q1_int / q0_int);
+    }
+
+    if (h2 && h1) {
+        q2_1_amp_hist->Fill(q2_amp / q1_amp);
+        q2_1_int_hist->Fill(q2_int / q1_int);
+    }
+
+    // Stockage dans les vecteurs de la structure clu_feat
+    clu_feat.q.push_back(TMath::Log(q1_amp / q0_amp));
+    clu_feat.ori.push_back(0);
+    clu_feat.y.push_back(y0);
+
+    if (use_integral) {
+        clu_feat.z.push_back(GetBarycenter_Z(z0, z1, z2, q0_int, q1_int, q2_int, h0, h1, h2));
+        clu_feat.err.push_back(GetBarycenter_Z_Error(z0, z1, z2, q0_int, q1_int, q2_int, h0, h1, h2));
+    } else {
+        clu_feat.z.push_back(GetBarycenter_Z(z0, z1, z2, q0_amp, q1_amp, q2_amp, h0, h1, h2));
+        clu_feat.err.push_back(GetBarycenter_Z_Error(z0, z1, z2, q0_amp, q1_amp, q2_amp, h0, h1, h2));
+    }
+
+    clu_feat.size.push_back(clu_size);
 }
 
 
 
 
 
-
-
-int matinv3(double *a, double *b)
-{
+int matinv3(double *a, double *b){
    double r11, r12, r22, r13, r23, r33, s11, s12, s22, s13, s23, s33;
 
    if (a[0] <= 0)
@@ -1447,4 +1696,12 @@ void plot_wf(int argc, char** argv) {
 
 //puis on calculeera l'écart type
 
+
+int main(int argc, char** argv) {
+    if (argc != 3) {
+        std::cerr << "Usage: " << argv[0] << " <input_data_file> <output_root_file>\n";
+        return 1; }
+    plot_wf(argc, argv);
+   // analyse_data(argc, argv);
+}
 
