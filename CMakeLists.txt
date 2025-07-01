@@ -11,6 +11,7 @@ link_directories(${ROOT_LIBRARY_DIR})
 
 add_executable(MainApp
     src/main.cpp
+        src/main.cpp
 )
 
 target_link_libraries(MainApp ${ROOT_LIBRARIES})

@@ -21,7 +21,7 @@
 
 
 int bord = 40;
-int N_hits = 100000;  // nombre max de hits à traiter
+int N_hits = 1000000;  // nombre max de hits à traiter
 int ADC = 10; //Amplitude en dessous de laquelle on a du bruit
 int X_charge = 18000;
 int X_amplitude = 2500;
@@ -656,7 +656,7 @@ void plot_wf(int argc, char** argv) {
     Int_t hit;
     Int_t cluster_per_trace;
     Double_t clu_pos[3];
-    Double_t hit_pos[3];
+
 
     Int_t    trk_ncl;
     Double_t trk_pos[3];
@@ -675,7 +675,6 @@ void plot_wf(int argc, char** argv) {
     TBranch *b_cluster_per_trace;  //!
     TBranch *b_trk_dir; //!
     TBranch *b_clu_pos; //!
-    TBranch *b_hit_pos;//!
 
     // Linking branches to variables
     tree->SetBranchAddress("event",    &event, &b_event);
@@ -688,7 +687,7 @@ void plot_wf(int argc, char** argv) {
     tree->SetBranchAddress("trk_ncl",  &cluster_per_trace, &b_cluster_per_trace);
     tree->SetBranchAddress("trk_dir",  &trk_dir, &b_trk_dir);
     tree->SetBranchAddress("clu_pos",  &clu_pos, &b_clu_pos);
-    tree->SetBranchAddress("hit_pos",  &hit_pos, &b_hit_pos);
+
 
     Int_t nentries = tree->GetEntries();
     std::cout << "entries = " << nentries << std::endl;
@@ -756,7 +755,7 @@ void plot_wf(int argc, char** argv) {
         if (hit == 0 && clu_size > 1){
             Q0_s_Q1_c.push_back(integrale(10, wf));
             Q0_s_Q1_a.push_back(coordypic(wf));
-            z_clu.push_back(clu_pos[2]);	    
+            z_clu.push_back(clu_pos[2]);
         }
 
         if (hit == 1){
@@ -789,16 +788,16 @@ void plot_wf(int argc, char** argv) {
 
         //if (event == look_event && pattern == look_pattern && cluster == look_cluster) {
             if (hit == 0){
-                hit_count_temp.push_back(0);
+                hit_count.push_back(hit_count_temp.size());
+            	hit_count_temp.clear();
                 for (int j = 0; j < wf->GetN(); ++j) {
                     double t, q;
                     wf     -> GetPoint(j, t, q);
                     wf_1   -> SetPoint(j, t, q);
-                }
+		}
             }
 
             if (hit == 1){
-                hit_count_temp.push_back(1);
                 for (int j = 0; j < wf->GetN(); ++j) {
                     double t, q;
                     wf     -> GetPoint(j, t, q);
@@ -806,7 +805,6 @@ void plot_wf(int argc, char** argv) {
                 }
             }
             if (hit == 2){
-                hit_count_temp.push_back(2);
                 for (int j = 0; j < wf->GetN(); ++j) {
                     double t, q;
                     wf     -> GetPoint(j, t, q);
@@ -814,19 +812,14 @@ void plot_wf(int argc, char** argv) {
                 }
             }
             if (hit == 3){
-                hit_count_temp.push_back(3);
                 for (int j = 0; j < wf->GetN(); ++j) {
                     double t, q;
                     wf     -> GetPoint(j, t, q);
                     wf_4   -> SetPoint(j, t, q);
                 }
             }
+	    hit_count_temp.push_back(hit);
 
-            if (clu_size >= 1 && hit_count_temp[hit_count_temp.size() - 2] + 1 != hit_count_temp[hit_count_temp.size() - 1]){
-                hit_count.push_back(hit_count_temp.size() - 1);
-                hit_count_temp.clear();
-                hit_count_temp.push_back(hit);
-            }
         //}
     }
     }
@@ -887,7 +880,8 @@ void plot_wf(int argc, char** argv) {
         wf_4 -> Draw("L same");
     }
 
-    TLegend * myl = new TLegend();
+
+    TLegend* myl = new TLegend(); 
 
 
     if( wf_1 -> GetN() > 0 )
@@ -955,11 +949,22 @@ void plot_wf(int argc, char** argv) {
     float max_val = std::max({h0 -> GetMaximum(), h1 -> GetMaximum(), h2 -> GetMaximum(), h3 -> GetMaximum()});
     h0 -> SetMaximum(1.1 * max_val);
 
+
+    gStyle->SetOptStat(0);
+
+
     h0 -> Draw();
     h1 -> Draw("same");
     h2 -> Draw("same");
     h3 -> Draw("same");
 
+   TIter next(c_all_charges->GetListOfPrimitives());
+	TObject *obj;
+	while ((obj = next())) {
+    		if (obj->InheritsFrom("TPaveStats")) {
+        	obj->Delete();
+    }
+}
 
 ///////////////////////////////////////////////////////////////////
 
@@ -1179,6 +1184,13 @@ void plot_wf(int argc, char** argv) {
     for (int val : hit_count) {
         hist -> Fill(val);
     }
+
+    hist->Draw("hist");
+
+    TLegend *legici = new TLegend(0.6, 0.7, 0.9, 0.85);
+    legici -> AddEntry(hist, Form("N_{elements} = %d", (int)hit_count.size()), "f");
+    legici -> Draw();
+
     hist->Write();
 
     //Histo du nombre de cluster par trace
@@ -1298,9 +1310,14 @@ void plot_wf(int argc, char** argv) {
 
     h_ratio_ZEROB -> Draw();
     h_ratio_ZERO -> Draw("SAME");
-    TLegend *leg1 = new TLegend(0.7, 0.7, 0.9, 0.9);
-    leg1 -> AddEntry(h_ratio_ZEROB, " Q1 / Q0 Amplitude", "l");
-    leg1 -> AddEntry(h_ratio_ZERO, "Q1 / Q0 Charge", "l");
+    TLegend *leg1 = new TLegend(0.65, 0.7, 0.9, 0.9);
+
+    TString label1 = Form("Q1 / Q0 Amplitude (%.0f entries)", h_ratio_ZEROB->GetEntries());
+    TString label2 = Form("Q1 / Q0 Charge (%.0f entries)", h_ratio_ZERO->GetEntries());
+
+    leg1->AddEntry(h_ratio_ZEROB, label1, "l");
+    leg1->AddEntry(h_ratio_ZERO,  label2, "l");
+
     leg1 -> Draw();
     c_ratio_01 -> Write();
 
@@ -1344,10 +1361,16 @@ void plot_wf(int argc, char** argv) {
     h_charge_1 -> Draw();
     h_charge_plus -> Draw("SAME");
 
+    int n1_c = h_charge_1->GetEntries();
+    int nplus_c = h_charge_plus->GetEntries();
+
+    TString label1_c = Form("clusters avec 1 hit (n = %d)", n1_c);
+    TString label2_c = Form("clusters avec >1 hit (n = %d)", nplus_c);
+
 
     TLegend *leg_charge = new TLegend(0.7, 0.75, 0.9, 0.9);
-    leg_charge -> AddEntry(h_charge_1, "clusters avec 1 hit ", "l");
-    leg_charge -> AddEntry(h_charge_plus, "clusters avec plus que 1 hit", "l");
+    leg_charge->AddEntry(h_charge_1, label1_c, "l");
+    leg_charge->AddEntry(h_charge_plus, label2_c, "l");
     leg_charge -> Draw();
     c_charge -> Draw();
     c_charge -> Write();
@@ -1370,6 +1393,8 @@ void plot_wf(int argc, char** argv) {
     TCanvas * c_amp = new TCanvas("c_amp_split", "Amplitude per cluster size");
     h_amp_1 -> SetLineColor(3);
     h_amp_plus -> SetLineColor(4);
+    gStyle -> SetOptStat(0);
+
 
     double maxa1 = h_amp_1 -> GetMaximum();
     double maxa2 = h_amp_plus -> GetMaximum();
@@ -1381,9 +1406,15 @@ void plot_wf(int argc, char** argv) {
     h_amp_1 -> Draw();
     h_amp_plus -> Draw("SAME");
 
+    int n1_a = h_amp_1->GetEntries();
+    int nplus_a = h_amp_plus->GetEntries();
+
+    TString label1_a = Form("clusters avec 1 hit (n = %d)", n1_a);
+    TString label2_a = Form("clusters avec >1 hit (n = %d)", nplus_a);
+
     TLegend * leg_amp = new TLegend(0.7, 0.75, 0.9, 0.9);
-    leg_amp -> AddEntry(h_amp_1, "cluster avec un hit ", "l");
-    leg_amp -> AddEntry(h_amp_plus, "cluster avec plus que 1 hit", "l");
+    leg_amp->AddEntry(h_amp_1, label1_a, "l");
+    leg_amp->AddEntry(h_amp_plus, label2_a, "l");
     leg_amp -> Draw();
     c_amp -> Draw();
     c_amp -> Write();
