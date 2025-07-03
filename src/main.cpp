@@ -190,6 +190,8 @@ void ProcessEvent(int event, int pattern, TClusterFeatures &clu_feat, TH1F * res
         if (! std::filesystem::exists("plots")) {
             std::filesystem::create_directory("plots");
         }
+        track->Draw("AP");
+        arc->Draw("same");
         canvas->SaveAs(Form("plots/pattern_gr_%i_%i.pdf", event, pattern));
         delete canvas;
 
